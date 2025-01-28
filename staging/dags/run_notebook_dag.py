@@ -40,7 +40,7 @@ with DAG(
     run_notebook = PapermillOperator(
         task_id='run_my_notebook',
         input_nb='/opt/airflow/airbnb_project/notebooks/main.ipynb',  # Path to the notebook
-        output_nb='/opt/airflow/airbnb_project/notebooks/main_output_4.ipynb',  # Path to save the output
+        output_nb='/opt/airflow/airbnb_project/notebooks/main_output.ipynb',  # Path to save the output
         kernel_name='python3',  # Specify the kernel name
         dag=dag,
     )

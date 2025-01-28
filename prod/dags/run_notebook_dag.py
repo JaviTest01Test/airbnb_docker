@@ -3,11 +3,12 @@ from airflow.operators.docker_operator import DockerOperator
 from airflow.utils.dates import days_ago
 from datetime import timedelta
 from airflow.operators.dummy import DummyOperator
+from airflow.operators.bash import BashOperator
 from airflow.providers.papermill.operators.papermill import PapermillOperator
 
 # Default arguments for the DAG
 default_args = {
-    'owner': 'airbnb_user',
+    'owner': 'root',
     'depends_on_past': False,
     'email_on_failure': False,
     'email_on_retry': False,
@@ -29,11 +30,17 @@ with DAG(
         task_id='start',
     )
 
+    set_permissions = BashOperator(
+    task_id='set_permissions',
+    bash_command="sudo chmod -R 777 /opt/airflow/airbnb_project",
+    dag=dag,
+    )
+
     # Create a task to run the notebook
     run_notebook = PapermillOperator(
         task_id='run_my_notebook',
-        input_nb='/opt/airflow/notebooks/prueba.ipynb',  # Path to the notebook
-        output_nb='/opt/airflow/notebooks/prueba_output.ipynb',  # Path to save the output
+        input_nb='/opt/airflow/airbnb_project/notebooks/main.ipynb',  # Path to the notebook
+        output_nb='/opt/airflow/airbnb_project/notebooks/main_output_4.ipynb',  # Path to save the output
         kernel_name='python3',  # Specify the kernel name
         dag=dag,
     )
@@ -42,4 +49,4 @@ with DAG(
         task_id='end',
     )
 
-    start >>  run_notebook >> end
+    start >> set_permissions >> run_notebook >> end
