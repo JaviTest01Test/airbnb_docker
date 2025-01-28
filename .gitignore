@@ -1,2 +1,6 @@
 logs/
 *.log
+
+staging/notebooks/git_operations.ipynb
+
+notebooks/git_operations.ipynb
