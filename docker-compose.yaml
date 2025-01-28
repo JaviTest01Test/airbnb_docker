@@ -1,0 +1,127 @@
+services:
+  airflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: airflow_${ENV_CONTAINER}
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      AIRFLOW__METRICS__STATSD_ON: True
+      AIRFLOW__METRICS__STATSD_HOST: "statsd-exporter"
+      AIRFLOW__METRICS__STATSD_PORT: 8125
+      AIRFLOW__SCHEDULER__STATSD_PREFIX: "airflow"
+    volumes:
+      - ${ENV}/dags:/opt/airflow/dags
+      - ${ENV}/logs:/opt/airflow/logs
+      - ${ENV}/notebooks:/opt/airflow/airbnb_project/notebooks
+      - ${ENV}/datasets:/opt/airflow/airbnb_project/datasets
+      - ${ENV}/src:/opt/airflow/airbnb_project/src
+      - ${ENV}/airflow_environment/airflow.cfg:/opt/airflow/airflow.cfg
+    ports:
+      - "8080:8080"
+    entrypoint: >
+      bash -c "
+      python3 -m pip install ipykernel &&
+      python3 -m ipykernel install --user &&
+      airflow db init &&
+      airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin &&
+      exec airflow webserver"
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: airflow_scheduler_${ENV_CONTAINER}
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+    volumes:
+      - ${ENV}/dags:/opt/airflow/dags
+      - ${ENV}/logs:/opt/airflow/logs
+      - ${ENV}/notebooks:/opt/airflow/airbnb_project/notebooks
+      - ${ENV}/datasets:/opt/airflow/airbnb_project/datasets
+      - ${ENV}/src:/opt/airflow/airbnb_project/src
+    entrypoint: >
+      bash -c "
+      python3 -m pip install ipykernel &&
+      python3 -m ipykernel install --user &&
+      airflow db init &&
+      exec airflow scheduler"
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:13
+    container_name: postgress_${ENV_CONTAINER}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - /postgres_db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  airbnb_project:
+    image: javitest01/airbnb-project:latest
+    container_name: airbnb_project_container_${ENV_CONTAINER}
+    ports:
+      - "8888:8888"
+    volumes:
+      - ${ENV}/notebooks:/airbnb_project/notebooks_local
+      - ${ENV}/datasets:/airbnb_project/datasets_local
+      - ${ENV}/src:/airbnb_project/src_local
+      - ${ENV}/python_scripts:/airbnb_project/python_scripts
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    user: "root"
+    entrypoint: >
+      bash -c "
+      python /airbnb_project/python_scripts/copy_notebooks.py /airbnb_project/notebooks /airbnb_project/notebooks_local &&
+      chmod -R 777 /airbnb_project/notebooks &&
+      python /airbnb_project/python_scripts/copy_notebooks.py /airbnb_project/src /airbnb_project/src_local &&
+      chmod -R 777 /airbnb_project/src &&
+      python /airbnb_project/python_scripts/copy_notebooks.py /airbnb_project/datasets /airbnb_project/datasets_local &&
+      chmod -R 777 /airbnb_project/datasets &&
+      jupyter notebook --ip=0.0.0.0 --port=8888 --allow-root --NotebookApp.token=''"
+    
+  statsd-exporter:
+    image: prom/statsd-exporter
+    container_name: statsd-exporter_${ENV_CONTAINER}
+    volumes:
+        - ${ENV}/statsd/statsd_mapping.yml:/tmp/statsd_mapping.yml
+    entrypoint: >
+      sh -c "/bin/statsd_exporter --statsd.listen-udp=:8125 --web.listen-address=:9102 --statsd.mapping-config=/tmp/statsd_mapping.yml --log.level=debug"
+    ports:
+        - 9102:9102
+        - 8125:8125/udp
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus_${ENV_CONTAINER}
+    ports:
+        - 9090:9090
+    volumes:
+        - ${ENV}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana_${ENV_CONTAINER}
+    environment:
+        GF_SECURITY_ADMIN_USER: grafana
+        GF_SECURITY_ADMIN_PASSWORD: grafana
+        GF_PATHS_PROVISIONING: /grafana/provisioning
+        ENV_CONTAINER: ${ENV_CONTAINER} 
+    ports:
+      - 3000:3000
+    volumes:
+      - ${ENV}/grafana/provisioning:/grafana/provisioning
+
+volumes:
+  postgres_db:  # Volume for PostgreSQL data
+  grafana_data:  # Volume for Grafana data
